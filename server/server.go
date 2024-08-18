@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kothawok/go-nntp"
+	"github.com/kothawoc/go-nntp"
 )
 
 // An NNTPError is a coded NNTP error message.

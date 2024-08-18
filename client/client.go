@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kothawok/go-nntp"
+	"github.com/kothawoc/go-nntp"
 )
 
 // Client is an NNTP client.

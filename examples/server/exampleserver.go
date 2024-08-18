@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dustin/go-nntp"
-	"github.com/dustin/go-nntp/server"
+	"github.com/kothawoc/go-nntp"
+	"github.com/kothawoc/go-nntp/server"
 )
 
 const maxArticles = 100

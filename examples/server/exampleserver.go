@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/kothawoc/go-nntp"
-	"github.com/kothawoc/go-nntp/server"
+	nntpserver "github.com/kothawoc/go-nntp/server"
 )
 
 const maxArticles = 100
@@ -66,12 +66,14 @@ func init() {
 
 }
 
-func (tb *testBackendType) ListGroups(max int) ([]*nntp.Group, error) {
-	rv := []*nntp.Group{}
+func (tb *testBackendType) ListGroups() (<-chan *nntp.Group, error) {
+	//rv := []*nntp.Group{}
+	retChan := make(chan *nntp.Group, 10)
 	for _, g := range tb.groups {
-		rv = append(rv, g.group)
+		retChan <- g.group
+		//rv = append(rv, g.group)
 	}
-	return rv, nil
+	return retChan, nil
 }
 
 func (tb *testBackendType) GetGroup(name string) (*nntp.Group, error) {
@@ -160,13 +162,14 @@ func (n nalist) Swap(i, j int) {
 }
 
 func (tb *testBackendType) GetArticles(group *nntp.Group,
-	from, to int64) ([]nntpserver.NumberedArticle, error) {
+	from, to int64) (<-chan nntpserver.NumberedArticle, error) {
 
 	gs, ok := tb.groups[group.Name]
 	if !ok {
 		return nil, nntpserver.ErrNoSuchGroup
 	}
 
+	retChan := make(chan nntpserver.NumberedArticle, 10)
 	log.Printf("Getting articles from %d to %d", from, to)
 
 	rv := []nntpserver.NumberedArticle{}
@@ -177,6 +180,9 @@ func (tb *testBackendType) GetArticles(group *nntp.Group,
 					a, ok := tb.articles[aref.msgid]
 					if ok {
 						article := mkArticle(a)
+						retChan <- nntpserver.NumberedArticle{
+							Num:     aref.num,
+							Article: article}
 						rv = append(rv,
 							nntpserver.NumberedArticle{
 								Num:     aref.num,
@@ -189,7 +195,8 @@ func (tb *testBackendType) GetArticles(group *nntp.Group,
 
 	sort.Sort(nalist(rv))
 
-	return rv, nil
+	return retChan, nil
+	//return rv, nil
 }
 
 func (tb *testBackendType) AllowPost() bool {
@@ -268,11 +275,23 @@ func (tb *testBackendType) Authenticate(user, pass string) (nntpserver.Backend, 
 	return nil, nntpserver.ErrAuthRejected
 }
 
+func (tb *testBackendType) GetArticleWithNoGroup(s string) (*nntp.Article, error) {
+	return nil, nntpserver.ErrAuthRejected
+}
+
 func maybefatal(err error, f string, a ...interface{}) {
 	if err != nil {
 		log.Fatalf(f, a...)
 	}
 }
+
+type GenIdType struct{}
+
+func (GenIdType) GenID() string {
+	return "Fake-NON-UNIQUE-ID"
+}
+
+var idGen GenIdType
 
 func main() {
 	a, err := net.ResolveTCPAddr("tcp", ":1119")
@@ -281,7 +300,7 @@ func main() {
 	maybefatal(err, "Error setting up listener: %v", err)
 	defer l.Close()
 
-	s := nntpserver.NewServer(&testBackend)
+	s := nntpserver.NewServer(&testBackend, idGen)
 
 	for {
 		c, err := l.AcceptTCP()

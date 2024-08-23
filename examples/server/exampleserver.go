@@ -305,6 +305,6 @@ func main() {
 	for {
 		c, err := l.AcceptTCP()
 		maybefatal(err, "Error accepting connection: %v", err)
-		go s.Process(c)
+		go s.Process(c, nntpserver.ClientSession{})
 	}
 }

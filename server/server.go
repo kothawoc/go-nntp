@@ -188,14 +188,17 @@ type IdGenerator interface {
 	GenID() string
 }
 
+type ClientSession map[string]string
+
 type session struct {
-	server      *Server
-	backend     Backend
-	idGenerator IdGenerator
-	group       *nntp.Group
-	number      int64
-	beIhave     BackendIHave
-	beWildMat   BackendListWildMat
+	server        *Server
+	backend       Backend
+	idGenerator   IdGenerator
+	group         *nntp.Group
+	number        int64
+	beIhave       BackendIHave
+	beWildMat     BackendListWildMat
+	clientSession ClientSession
 }
 
 func (s *session) setBackend(backend Backend) {
@@ -269,7 +272,7 @@ func (s *session) dispatchCommand(cmd string, args []string,
 }
 
 // Process an NNTP session.
-func (s *Server) Process(tc io.ReadWriteCloser) {
+func (s *Server) Process(tc io.ReadWriteCloser, clientSession ClientSession) {
 	defer tc.Close()
 	c := textproto.NewConn(tc)
 
@@ -281,10 +284,11 @@ func (s *Server) Process(tc io.ReadWriteCloser) {
 	}
 
 	sess := &session{
-		server:      s,
-		idGenerator: s.IdGenerator,
-		group:       nil,
-		number:      0,
+		server:        s,
+		idGenerator:   s.IdGenerator,
+		group:         nil,
+		number:        0,
+		clientSession: clientSession,
 	}
 	sess.setBackend(backend)
 
@@ -1515,11 +1519,11 @@ func handleAuthInfo(args []string, s *session, c *textproto.Conn) error {
 		return ErrSyntax
 	}
 
-	if s.backend.Authorized() {
-		return c.PrintfLine("250 authenticated")
-	}
+	//if s.backend.Authorized() {
+	//	return c.PrintfLine("250 authenticated")
+	//}
 
-	c.PrintfLine("350 Continue")
+	c.PrintfLine("381 Enter passphrase")
 	a, err := c.ReadLine()
 	parts := strings.SplitN(a, " ", 3)
 	if strings.ToLower(parts[0]) != "authinfo" || strings.ToLower(parts[1]) != "pass" {

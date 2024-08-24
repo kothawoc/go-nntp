@@ -34,7 +34,6 @@ package nntpserver
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"net/textproto"
@@ -128,21 +127,21 @@ type NumberedArticle struct {
 // The Backend that provides the things and does the stuff.
 type Backend interface {
 	// gets a list of NNTP newsgroups.
-	ListGroups() (<-chan *nntp.Group, error)
-	GetGroup(name string) (*nntp.Group, error)
+	ListGroups(session map[string]string) (<-chan *nntp.Group, error)
+	GetGroup(session map[string]string, name string) (*nntp.Group, error)
 	// DONE: Add a way for Article Downloading without group select
 	// if not to implement DO: return nil, ErrNoGroupSelected
-	GetArticleWithNoGroup(id string) (*nntp.Article, error)
-	GetArticle(group *nntp.Group, id string) (*nntp.Article, error)
+	GetArticleWithNoGroup(session map[string]string, id string) (*nntp.Article, error)
+	GetArticle(session map[string]string, group *nntp.Group, id string) (*nntp.Article, error)
 	// old: GetArticles(group *nntp.Group, from, to int64) ([]NumberedArticle, error)
 	// channels are more suitable for large scale
-	GetArticles(group *nntp.Group, from, to int64) (<-chan NumberedArticle, error)
-	Authorized() bool
+	GetArticles(session map[string]string, group *nntp.Group, from, to int64) (<-chan NumberedArticle, error)
+	Authorized(session map[string]string) bool
 	// Authenticate and optionally swap out the backend for this session.
 	// You may return nil to continue using the same backend.
-	Authenticate(user, pass string) (Backend, error)
-	AllowPost() bool
-	Post(article *nntp.Article) error
+	Authenticate(session map[string]string, user, pass string) (Backend, error)
+	AllowPost(session map[string]string) bool
+	Post(session map[string]string, article *nntp.Article) error
 }
 
 // An optional Interface Backend-objects may provide.
@@ -158,7 +157,7 @@ type BackendIHave interface {
 	//
 	// If BackendIHave is not provided, the server will use the Post-method with
 	// any ErrPostingFailed-result being replaced by ErrIHaveFailed automatically.
-	IHave(id string, article *nntp.Article) error
+	IHave(session map[string]string, id string, article *nntp.Article) error
 
 	// This method will tell the server frontent, and thus, the client, wether the server should
 	// accept the Article or not.
@@ -168,7 +167,7 @@ type BackendIHave interface {
 	//
 	// If BackendIHave is not provided, the server will use the method
 	// GetArticleWithNoGroup-method to determine.
-	IHaveWantArticle(id string) error
+	IHaveWantArticle(session map[string]string, id string) error
 }
 
 // An optional Interface Backend-objects may provide.
@@ -181,7 +180,7 @@ type BackendListWildMat interface {
 	// This function will be called instead of ListGroups, if the
 	// WildMat parameter is given. The implementor must return at
 	// least all groups, that matches the given pattern.
-	ListGroupsWildMat(pattern *WildMat) (<-chan *nntp.Group, error)
+	ListGroupsWildMat(session map[string]string, pattern *WildMat) (<-chan *nntp.Group, error)
 }
 
 type IdGenerator interface {
@@ -291,6 +290,7 @@ func (s *Server) Process(tc io.ReadWriteCloser, clientSession ClientSession) {
 		clientSession: clientSession,
 	}
 	sess.setBackend(backend)
+	log.Printf("idg: [%s]", s.IdGenerator.GenID())
 
 	c.PrintfLine("200 Hello!")
 	for {
@@ -386,7 +386,7 @@ func handleListgroup(args []string, s *session, c *textproto.Conn) error {
 		}
 		if grp == nil || !ok {
 			var err error
-			grp, err = s.backend.GetGroup(args[0])
+			grp, err = s.backend.GetGroup(s.clientSession, args[0])
 			if err != nil {
 				return err
 			}
@@ -397,7 +397,7 @@ func handleListgroup(args []string, s *session, c *textproto.Conn) error {
 	}
 
 	from, to := parseRange(arg1)
-	articles, err := s.backend.GetArticles(grp, from, to)
+	articles, err := s.backend.GetArticles(s.clientSession, grp, from, to)
 	if err != nil {
 		return err
 	}
@@ -462,9 +462,9 @@ func handleOver(args []string, s *session, c *textproto.Conn) error {
 		var a *nntp.Article
 		var e error
 		if nogroup {
-			a, e = s.backend.GetArticleWithNoGroup(arg0)
+			a, e = s.backend.GetArticleWithNoGroup(s.clientSession, arg0)
 		} else {
-			a, e = s.backend.GetArticle(s.group, arg0)
+			a, e = s.backend.GetArticle(s.clientSession, s.group, arg0)
 		}
 		if e != nil {
 			return e
@@ -481,7 +481,7 @@ func handleOver(args []string, s *session, c *textproto.Conn) error {
 		return nil
 	}
 	from, to := parseRange(arg0)
-	articles, err := s.backend.GetArticles(s.group, from, to)
+	articles, err := s.backend.GetArticles(s.clientSession, s.group, from, to)
 	if err != nil {
 		return err
 	}
@@ -600,9 +600,9 @@ func handleHdr(args []string, s *session, c *textproto.Conn) error {
 		var a *nntp.Article
 		var e error
 		if nogroup {
-			a, e = s.backend.GetArticleWithNoGroup(arg1)
+			a, e = s.backend.GetArticleWithNoGroup(s.clientSession, arg1)
 		} else {
-			a, e = s.backend.GetArticle(s.group, arg1)
+			a, e = s.backend.GetArticle(s.clientSession, s.group, arg1)
 		}
 		if e != nil {
 			return e
@@ -621,7 +621,7 @@ func handleHdr(args []string, s *session, c *textproto.Conn) error {
 	}
 
 	from, to := parseRange(arg1)
-	articles, err := s.backend.GetArticles(s.group, from, to)
+	articles, err := s.backend.GetArticles(s.clientSession, s.group, from, to)
 	if err != nil {
 		return err
 	}
@@ -738,9 +738,9 @@ func handleList(args []string, s *session, c *textproto.Conn) error {
 	var groups <-chan *nntp.Group
 
 	if wildmat != nil && s.beWildMat != nil {
-		groups, err = s.beWildMat.ListGroupsWildMat(wildmat)
+		groups, err = s.beWildMat.ListGroupsWildMat(s.clientSession, wildmat)
 	} else {
-		groups, err = s.backend.ListGroups()
+		groups, err = s.backend.ListGroups(s.clientSession)
 	}
 	if err != nil {
 		return err
@@ -830,7 +830,7 @@ func handleGroup(args []string, s *session, c *textproto.Conn) error {
 		return ErrNoSuchGroup
 	}
 
-	group, err := s.backend.GetGroup(args[0])
+	group, err := s.backend.GetGroup(s.clientSession, args[0])
 	if err != nil {
 		return err
 	}
@@ -870,7 +870,7 @@ func handleLast(args []string, s *session, c *textproto.Conn) error {
 	}
 	for s.group.Low <= s.number {
 		s.number--
-		a, _ := s.backend.GetArticle(s.group, fmt.Sprint(s.number))
+		a, _ := s.backend.GetArticle(s.clientSession, s.group, fmt.Sprint(s.number))
 		if a != nil {
 			c.PrintfLine("223 %d %s", s.number, a.MessageID())
 			return nil
@@ -906,7 +906,7 @@ func handleNext(args []string, s *session, c *textproto.Conn) error {
 	}
 	for s.number <= s.group.High {
 		s.number++
-		a, _ := s.backend.GetArticle(s.group, fmt.Sprint(s.number))
+		a, _ := s.backend.GetArticle(s.clientSession, s.group, fmt.Sprint(s.number))
 		if a != nil {
 			c.PrintfLine("223 %d %s", s.number, a.MessageID())
 			return nil
@@ -968,13 +968,13 @@ func (s *session) getArticle(args []string) (*nntp.Article, error) {
 		if s.number < 0 || s.number > s.group.High {
 			return nil, ErrNoCurrentArticle
 		}
-		return s.backend.GetArticle(s.group, fmt.Sprint(s.number))
+		return s.backend.GetArticle(s.clientSession, s.group, fmt.Sprint(s.number))
 	}
 	if s.group == nil {
-		return s.backend.GetArticleWithNoGroup(args[0])
+		return s.backend.GetArticleWithNoGroup(s.clientSession, args[0])
 		// return nil, ErrNoGroupSelected
 	}
-	return s.backend.GetArticle(s.group, args[0])
+	return s.backend.GetArticle(s.clientSession, s.group, args[0])
 }
 
 /*
@@ -1138,7 +1138,7 @@ Subsequent responses
 	441    Posting failed
 */
 func handlePost(args []string, s *session, c *textproto.Conn) error {
-	if !s.backend.AllowPost() {
+	if !s.backend.AllowPost(s.clientSession) {
 		return ErrPostingNotPermitted
 	}
 
@@ -1156,7 +1156,7 @@ func handlePost(args []string, s *session, c *textproto.Conn) error {
 		}
 	}
 	article.Body = c.DotReader()
-	err = s.backend.Post(&article)
+	err = s.backend.Post(s.clientSession, &article)
 	if err != nil {
 		return err
 	}
@@ -1195,7 +1195,7 @@ func handleIHave(args []string, s *session, c *textproto.Conn) error {
 	if len(args) < 1 {
 		return ErrSyntax
 	}
-	if !s.backend.AllowPost() {
+	if !s.backend.AllowPost(s.clientSession) {
 		return ErrNotWanted
 	}
 	var article *nntp.Article
@@ -1206,7 +1206,7 @@ func handleIHave(args []string, s *session, c *textproto.Conn) error {
 	}
 
 	// See if we have it.
-	article, err = s.backend.GetArticleWithNoGroup(args[0])
+	article, err = s.backend.GetArticleWithNoGroup(s.clientSession, args[0])
 	if article != nil {
 		return ErrNotWanted
 	}
@@ -1218,7 +1218,7 @@ func handleIHave(args []string, s *session, c *textproto.Conn) error {
 		return ErrIHaveFailed
 	}
 	article.Body = c.DotReader()
-	err = s.backend.Post(article)
+	err = s.backend.Post(s.clientSession, article)
 	if err != nil {
 		if err == ErrPostingFailed {
 			err = ErrIHaveFailed
@@ -1230,7 +1230,7 @@ func handleIHave(args []string, s *session, c *textproto.Conn) error {
 way_use_beIhave:
 
 	// See if we have it.
-	err = s.beIhave.IHaveWantArticle(args[0])
+	err = s.beIhave.IHaveWantArticle(s.clientSession, args[0])
 	if err != nil {
 		return err
 	}
@@ -1242,7 +1242,7 @@ way_use_beIhave:
 		return ErrIHaveFailed
 	}
 	article.Body = c.DotReader()
-	err = s.beIhave.IHave(args[0], article)
+	err = s.beIhave.IHave(s.clientSession, args[0], article)
 	if err != nil {
 		return err
 	}
@@ -1268,7 +1268,7 @@ func handleCheck(args []string, s *session, c *textproto.Conn) error {
 	if len(args) < 1 {
 		return ErrSyntax
 	}
-	if !s.backend.AllowPost() {
+	if !s.backend.AllowPost(s.clientSession) {
 		return c.PrintfLine("438 %s", args[0])
 	}
 	var article *nntp.Article
@@ -1279,7 +1279,7 @@ func handleCheck(args []string, s *session, c *textproto.Conn) error {
 	}
 
 	// See if we have it.
-	article, err = s.backend.GetArticleWithNoGroup(args[0])
+	article, err = s.backend.GetArticleWithNoGroup(s.clientSession, args[0])
 	if article != nil {
 		return c.PrintfLine("438 %s", args[0])
 	}
@@ -1289,7 +1289,7 @@ func handleCheck(args []string, s *session, c *textproto.Conn) error {
 way_use_beIhave:
 
 	// See if we have it.
-	err = s.beIhave.IHaveWantArticle(args[0])
+	err = s.beIhave.IHaveWantArticle(s.clientSession, args[0])
 	if err != nil {
 		return c.PrintfLine("438 %s", args[0])
 	}
@@ -1313,11 +1313,11 @@ Syntax
 */
 func handleTakethis(args []string, s *session, c *textproto.Conn) error {
 	if len(args) < 1 {
-		io.Copy(ioutil.Discard, c.DotReader())
+		io.Copy(io.Discard, c.DotReader())
 		return c.PrintfLine("501 unknown syntax")
 	}
-	if !s.backend.AllowPost() {
-		io.Copy(ioutil.Discard, c.DotReader())
+	if !s.backend.AllowPost(s.clientSession) {
+		io.Copy(io.Discard, c.DotReader())
 		return c.PrintfLine("439 %s", args[0])
 	}
 	var article *nntp.Article
@@ -1328,9 +1328,9 @@ func handleTakethis(args []string, s *session, c *textproto.Conn) error {
 	}
 
 	// See if we have it.
-	article, err = s.backend.GetArticleWithNoGroup(args[0])
+	article, err = s.backend.GetArticleWithNoGroup(s.clientSession, args[0])
 	if article != nil {
-		io.Copy(ioutil.Discard, c.DotReader())
+		io.Copy(io.Discard, c.DotReader())
 		return c.PrintfLine("439 %s", args[0])
 	}
 
@@ -1338,13 +1338,13 @@ func handleTakethis(args []string, s *session, c *textproto.Conn) error {
 	article = &nntp.Article{}
 	article.Header, err = c.ReadMIMEHeader()
 	if err != nil {
-		io.Copy(ioutil.Discard, c.DotReader())
+		io.Copy(io.Discard, c.DotReader())
 		return c.PrintfLine("439 %s", args[0])
 	}
 	article.Body = c.DotReader()
-	err = s.backend.Post(article)
+	err = s.backend.Post(s.clientSession, article)
 	if err != nil {
-		io.Copy(ioutil.Discard, article.Body)
+		io.Copy(io.Discard, article.Body)
 		return c.PrintfLine("439 %s", args[0])
 	}
 	return c.PrintfLine("239 %s", args[0])
@@ -1352,22 +1352,22 @@ func handleTakethis(args []string, s *session, c *textproto.Conn) error {
 way_use_beIhave:
 
 	// See if we have it.
-	err = s.beIhave.IHaveWantArticle(args[0])
+	err = s.beIhave.IHaveWantArticle(s.clientSession, args[0])
 	if err != nil {
-		io.Copy(ioutil.Discard, c.DotReader())
+		io.Copy(io.Discard, c.DotReader())
 		return c.PrintfLine("439 %s", args[0])
 	}
 
 	article = &nntp.Article{}
 	article.Header, err = c.ReadMIMEHeader()
 	if err != nil {
-		io.Copy(ioutil.Discard, c.DotReader())
+		io.Copy(io.Discard, c.DotReader())
 		return c.PrintfLine("439 %s", args[0])
 	}
 	article.Body = c.DotReader()
-	err = s.beIhave.IHave(args[0], article)
+	err = s.beIhave.IHave(s.clientSession, args[0], article)
 	if err != nil {
-		io.Copy(ioutil.Discard, article.Body)
+		io.Copy(io.Discard, article.Body)
 		return c.PrintfLine("439 %s", args[0])
 	}
 	return c.PrintfLine("239 %s", args[0])
@@ -1415,7 +1415,7 @@ func handleCap(args []string, s *session, c *textproto.Conn) error {
 	fmt.Fprintf(dw, "VERSION 2\n")
 	fmt.Fprintf(dw, "READER\n")
 	fmt.Fprintf(dw, "STREAMING\n")
-	if s.backend.AllowPost() {
+	if s.backend.AllowPost(s.clientSession) {
 		fmt.Fprintf(dw, "POST\n")
 		fmt.Fprintf(dw, "IHAVE\n")
 	}
@@ -1467,7 +1467,7 @@ func handleMode(args []string, s *session, c *textproto.Conn) error {
 	case "reader":
 		fallthrough
 	default:
-		if s.backend.AllowPost() {
+		if s.backend.AllowPost(s.clientSession) {
 			c.PrintfLine("200 Posting allowed")
 		} else {
 			c.PrintfLine("201 Posting prohibited")
@@ -1529,7 +1529,7 @@ func handleAuthInfo(args []string, s *session, c *textproto.Conn) error {
 	if strings.ToLower(parts[0]) != "authinfo" || strings.ToLower(parts[1]) != "pass" {
 		return ErrSyntax
 	}
-	b, err := s.backend.Authenticate(args[1], parts[2])
+	b, err := s.backend.Authenticate(s.clientSession, args[1], parts[2])
 	if err == nil {
 		c.PrintfLine("250 authenticated")
 		if b != nil {

@@ -66,7 +66,7 @@ func init() {
 
 }
 
-func (tb *testBackendType) ListGroups() (<-chan *nntp.Group, error) {
+func (tb *testBackendType) ListGroups(session map[string]string) (<-chan *nntp.Group, error) {
 	//rv := []*nntp.Group{}
 	retChan := make(chan *nntp.Group, 10)
 	for _, g := range tb.groups {
@@ -76,7 +76,7 @@ func (tb *testBackendType) ListGroups() (<-chan *nntp.Group, error) {
 	return retChan, nil
 }
 
-func (tb *testBackendType) GetGroup(name string) (*nntp.Group, error) {
+func (tb *testBackendType) GetGroup(session map[string]string, name string) (*nntp.Group, error) {
 	var group *nntp.Group
 
 	for _, g := range tb.groups {
@@ -114,7 +114,7 @@ func findInRing(in *ring.Ring, f func(r interface{}) bool) *ring.Ring {
 	return nil
 }
 
-func (tb *testBackendType) GetArticle(group *nntp.Group, id string) (*nntp.Article, error) {
+func (tb *testBackendType) GetArticle(session map[string]string, group *nntp.Group, id string) (*nntp.Article, error) {
 
 	msgID := id
 	var a *articleStorage
@@ -161,7 +161,7 @@ func (n nalist) Swap(i, j int) {
 	n[i], n[j] = n[j], n[i]
 }
 
-func (tb *testBackendType) GetArticles(group *nntp.Group,
+func (tb *testBackendType) GetArticles(session map[string]string, group *nntp.Group,
 	from, to int64) (<-chan nntpserver.NumberedArticle, error) {
 
 	gs, ok := tb.groups[group.Name]
@@ -199,7 +199,7 @@ func (tb *testBackendType) GetArticles(group *nntp.Group,
 	//return rv, nil
 }
 
-func (tb *testBackendType) AllowPost() bool {
+func (tb *testBackendType) AllowPost(session map[string]string) bool {
 	return true
 }
 
@@ -213,7 +213,7 @@ func (tb *testBackendType) decr(msgid string) {
 	}
 }
 
-func (tb *testBackendType) Post(article *nntp.Article) error {
+func (tb *testBackendType) Post(session map[string]string, article *nntp.Article) error {
 	log.Printf("Got headers: %#v", article.Header)
 	b := []byte{}
 	buf := bytes.NewBuffer(b)
@@ -267,15 +267,15 @@ func (tb *testBackendType) Post(article *nntp.Article) error {
 	return nil
 }
 
-func (tb *testBackendType) Authorized() bool {
+func (tb *testBackendType) Authorized(session map[string]string) bool {
 	return true
 }
 
-func (tb *testBackendType) Authenticate(user, pass string) (nntpserver.Backend, error) {
+func (tb *testBackendType) Authenticate(usession map[string]string, ser, pass string) (nntpserver.Backend, error) {
 	return nil, nntpserver.ErrAuthRejected
 }
 
-func (tb *testBackendType) GetArticleWithNoGroup(s string) (*nntp.Article, error) {
+func (tb *testBackendType) GetArticleWithNoGroup(session map[string]string, s string) (*nntp.Article, error) {
 	return nil, nntpserver.ErrAuthRejected
 }
 

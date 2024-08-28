@@ -475,7 +475,7 @@ func handleOver(args []string, s *session, c *textproto.Conn) error {
 			a.Header.Get("Subject"),
 			a.Header.Get("From"),
 			a.Header.Get("Date"),
-			a.Header.Get("Message-Id"),
+			a.Header.Get("Message-ID"),
 			a.Header.Get("References"),
 			a.Bytes, a.Lines)
 		return nil
@@ -493,7 +493,7 @@ func handleOver(args []string, s *session, c *textproto.Conn) error {
 			a.Article.Header.Get("Subject"),
 			a.Article.Header.Get("From"),
 			a.Article.Header.Get("Date"),
-			a.Article.Header.Get("Message-Id"),
+			a.Article.Header.Get("Message-ID"),
 			a.Article.Header.Get("References"),
 			a.Article.Bytes, a.Article.Lines)
 	}
@@ -1150,9 +1150,9 @@ func handlePost(args []string, s *session, c *textproto.Conn) error {
 		return ErrPostingFailed
 	}
 	{
-		msgID := article.Header.Get("Message-Id")
+		msgID := article.Header.Get("Message-ID")
 		if msgID == "" {
-			article.Header.Set("Message-Id", s.idGenerator.GenID())
+			article.Header.Set("Message-ID", s.idGenerator.GenID())
 		}
 	}
 	article.Body = c.DotReader()
@@ -1531,7 +1531,8 @@ func handleAuthInfo(args []string, s *session, c *textproto.Conn) error {
 	}
 	b, err := s.backend.Authenticate(s.clientSession, args[1], parts[2])
 	if err == nil {
-		c.PrintfLine("250 authenticated")
+		c.PrintfLine("281 authenticated")
+		// c.PrintfLine("250 authenticated")
 		if b != nil {
 			s.setBackend(b)
 		}

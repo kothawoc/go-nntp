@@ -391,6 +391,9 @@ func (c *Client) Over(args ...int) ([]OverItem, error) {
 	ret := []OverItem{}
 	for _, item := range lines {
 		splitItem := strings.Split(item, "\t")
+		if len(splitItem) < 5 {
+			continue
+		}
 		ret = append(ret, OverItem{
 			Number:        splitItem[0],
 			Subject:       splitItem[1],

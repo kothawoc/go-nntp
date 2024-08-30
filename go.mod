@@ -1,3 +1,3 @@
 module github.com/kothawoc/go-nntp
 
-go 1.22.3
+go 1.23.0

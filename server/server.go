@@ -1099,6 +1099,9 @@ func handleArticle(args []string, s *session, c *textproto.Conn) error {
 	if err != nil {
 		return err
 	}
+	if article == nil {
+		return fmt.Errorf("empty article")
+	}
 	c.PrintfLine("220 1 %s", article.MessageID())
 	dw := c.DotWriter()
 	defer dw.Close()

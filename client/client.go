@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/textproto"
 	"strconv"
@@ -361,6 +362,7 @@ References header content
 */
 type OverItem struct {
 	Number        string
+	From          string
 	Subject       string
 	Date          string
 	MessageId     string
@@ -391,17 +393,19 @@ func (c *Client) Over(args ...int) ([]OverItem, error) {
 	ret := []OverItem{}
 	for _, item := range lines {
 		splitItem := strings.Split(item, "\t")
+		slog.Info("Split Items:", "items", splitItem)
 		if len(splitItem) < 5 {
 			continue
 		}
 		ret = append(ret, OverItem{
 			Number:        splitItem[0],
 			Subject:       splitItem[1],
-			Date:          splitItem[2],
-			MessageId:     splitItem[3],
-			References:    splitItem[4],
-			bytesMetadata: splitItem[5],
-			linesMetadata: splitItem[6],
+			From:          splitItem[2],
+			Date:          splitItem[3],
+			MessageId:     splitItem[4],
+			References:    splitItem[5],
+			bytesMetadata: splitItem[6],
+			linesMetadata: splitItem[7],
 		})
 	}
 	return ret, nil

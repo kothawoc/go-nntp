@@ -32,7 +32,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net"
 	"net/textproto"
@@ -115,31 +114,31 @@ func parsePosting(p string) nntp.PostingStatus {
 
 // List groups
 func (c *Client) List(sub string) (rv []nntp.Group, err error) {
+	rv = make([]nntp.Group, 0)
 	if sub != "" {
 		sub = " " + sub
 	}
 	_, _, err = c.Command("LIST"+sub, 215)
 	if err != nil {
-		log.Printf("list failed abandoming error [%v]", err)
+		slog.Error("list failed, abandoning, error", "error", err)
 		return
 	}
 	var groupLines []string
 	groupLines, err = c.conn.ReadDotLines()
 	if err != nil {
-		log.Printf("abandoming error [%v] [%v]", err, groupLines)
+		slog.Error("list failed, abandoning, error", "error", err, "groupLines", groupLines)
 		return
 	}
-	log.Printf("lines got response error [%v] [%v]", err, groupLines)
-	rv = make([]nntp.Group, 0, len(groupLines))
+	slog.Debug("abandoming error [%v] [%v]", "error", err, "groupLines", groupLines)
 
 	for _, l := range groupLines {
-		log.Printf("lines list groups [%v]", l)
+		slog.Debug("lines list groups", "lines", l)
 		parts := strings.Split(l, " ")
 		if len(parts) < 3 {
-			log.Printf("abandoming list groups [%v]", parts)
+			slog.Error("abandoming list groups", "parts", parts)
 			continue
 		} else {
-			log.Printf("doing list groups [%v]", parts)
+			slog.Debug("doing list groups", "parts", parts)
 		}
 		high, errh := strconv.ParseInt(parts[1], 10, 64)
 		low, errl := strconv.ParseInt(parts[2], 10, 64)
@@ -153,7 +152,7 @@ func (c *Client) List(sub string) (rv []nntp.Group, err error) {
 		}
 	}
 
-	log.Printf("sgroup ending list [%v]", rv)
+	slog.Debug("sgroup ending list", "rv", rv)
 	return
 }
 
@@ -393,7 +392,7 @@ func (c *Client) Over(args ...int) ([]OverItem, error) {
 	ret := []OverItem{}
 	for _, item := range lines {
 		splitItem := strings.Split(item, "\t")
-		slog.Info("Split Items:", "items", splitItem)
+		slog.Debug("Split Items:", "items", splitItem)
 		if len(splitItem) < 5 {
 			continue
 		}

@@ -34,7 +34,7 @@ package nntpserver
 import (
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"net/textproto"
 	"strconv"
@@ -290,17 +290,17 @@ func (s *Server) Process(tc io.ReadWriteCloser, clientSession ClientSession) {
 		clientSession: clientSession,
 	}
 	sess.setBackend(backend)
-	log.Printf("idg: [%s]", s.IdGenerator.GenID())
+	slog.Debug("id gen test", "idgen", s.IdGenerator.GenID())
 
 	c.PrintfLine("200 Hello!")
 	for {
 		l, err := c.ReadLine()
 		if err != nil {
-			log.Printf("Error reading from client, dropping conn: %v", err)
+			slog.Error("Error reading from client, dropping conn", "error", err)
 			return
 		}
 		cmd := strings.Split(l, " ")
-		log.Printf("Got cmd:  %+v", cmd)
+		slog.Debug("Got cmd", "cmd", cmd)
 		args := []string{}
 		if len(cmd) > 1 {
 			args = cmd[1:]
@@ -311,12 +311,12 @@ func (s *Server) Process(tc io.ReadWriteCloser, clientSession ClientSession) {
 			switch {
 			case err == io.EOF:
 				// Drop this connection silently. They hung up
+				slog.Debug("Error dispatching command, dropping conn", "error", err)
 				return
 			case isNNTPError:
 				c.PrintfLine(err.Error())
 			default:
-				log.Printf("Error dispatching command, dropping conn: %v",
-					err)
+				slog.Debug("Error dispatching command, dropping conn", "error", err)
 				return
 			}
 		}
@@ -1403,7 +1403,7 @@ Responses
 	111 yyyymmddhhmmss    Server date and time
 */
 func handleDate(args []string, s *session, c *textproto.Conn) error {
-	t := time.Now()
+	t := time.Now().UTC() // don't leak local time
 	Y, M, D := t.Date()
 	h, m, z := t.Clock()
 	c.PrintfLine("111 %04d%02d%02d%02d%02d%02d", Y, int(M), D, h, m, z)
